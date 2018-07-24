@@ -22,17 +22,6 @@ class ECS {
         throw `Existing entity at id ${guid}: ${this.hash[guid]}`;
         // add entity to hash
         this.hash[guid] = entity;
-        // add entity to manager
-        for (let component in entity) {
-            if (entity.hasOwnProperty(component)) {
-                // for each component in the object
-                if (this.manager[component] === undefined) {
-                    this.manager[component] = new Set([guid]);
-                } else {
-                    this.manager[component].add(guid);
-                }
-            }
-        }
     }
     getFirst(...components) {
         return Array.from(this.filter(...components))[0];
@@ -63,7 +52,23 @@ class ECS {
         }
     }
     updateManager() {
-        
+        this.manager = {};
+        for (const guid in this.hash) {
+            if (this.hash.hasOwnProperty(guid)) {
+                const entity = this.hash[guid];
+                // add entity to manager
+                for (let component in entity) {
+                    if (entity.hasOwnProperty(component)) {
+                        // for each component in the object
+                        if (this.manager[component] === undefined) {
+                            this.manager[component] = new Set([guid]);
+                        } else {
+                            this.manager[component].add(guid);
+                        }
+                    }
+                }
+            }
+        }
     }
     filter(...components) {
         let set = this.manager[components[0]];

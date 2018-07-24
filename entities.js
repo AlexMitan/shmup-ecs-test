@@ -5,10 +5,14 @@ function vec(x, y, vx, vy) {
     return { x, y };
 }
 
-function makeStar(x, y, w, h, fill) {
+function makeStar(x, y, vx, vy, w, h, fill) {
     return {
-        render: Object.assign({}, makeRect(w, h), {fill}),
-        position: vec(x, y)
+        // render: Object.assign({}, makeRect(w, h), {fill}),
+        render: {
+            w: w, h: h, fill: fill
+        },
+        position: vec(x, y),
+        velocity: vec(vx, vy)
     }
 }
 const FILTER_PLAYER        = 0b00001;

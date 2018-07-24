@@ -23,17 +23,6 @@ class ECS {
         throw `Existing entity at id ${guid}: ${this.hash[guid]}`;
         // add entity to hash
         this.hash[guid] = entity;
-        // add entity to manager
-        for (let component in entity) {
-            if (entity.hasOwnProperty(component)) {
-                // for each component in the object
-                if (this.manager[component] === undefined) {
-                    this.manager[component] = new Set([guid]);
-                } else {
-                    this.manager[component].add(guid);
-                }
-            }
-        }
     }
     getFirst(...components) {
         return Array.from(this.filter(...components))[0];
@@ -61,6 +50,25 @@ class ECS {
         this.systems.push(system);
         if (system.process === undefined) {
             console.log(`WARNING: system ${system} does not have a process(ecs) method defined.`);
+        }
+    }
+    updateManager() {
+        this.manager = {};
+        for (const guid in this.hash) {
+            if (this.hash.hasOwnProperty(guid)) {
+                const entity = this.hash[guid];
+                // add entity to manager
+                for (let component in entity) {
+                    if (entity.hasOwnProperty(component)) {
+                        // for each component in the object
+                        if (this.manager[component] === undefined) {
+                            this.manager[component] = new Set([guid]);
+                        } else {
+                            this.manager[component].add(guid);
+                        }
+                    }
+                }
+            }
         }
     }
     filter(...components) {
@@ -129,10 +137,14 @@ function vec(x, y, vx, vy) {
     return { x, y };
 }
 
-function makeStar(x, y, w, h, fill) {
+function makeStar(x, y, vx, vy, w, h, fill) {
     return {
-        render: Object.assign({}, makeRect(w, h), {fill}),
-        position: vec(x, y)
+        // render: Object.assign({}, makeRect(w, h), {fill}),
+        render: {
+            w: w, h: h, fill: fill
+        },
+        position: vec(x, y),
+        velocity: vec(vx, vy)
     }
 }
 const FILTER_PLAYER        = 0b00001;
@@ -230,19 +242,26 @@ window.onload = () => {
     let velocitySystem = new systems.VelocitySystem();
     let initBackgroundSystem = new systems.InitBackgroundSystem(svg);
     let boxRenderSystem = new systems.BoxRenderSystem(svg);
-    let starSpawnerSystem = new systems.StarSpawnerSystem(true);
-    let blankSystem = new systems.BlankSystem(true);
+    let starSpawnerSystem = new systems.StarSpawnerSystem();
+    // let blankSystem = new systems.BlankSystem();
 
-    let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
-    let gameState = entities.makeGameState(10, 10, 300, 500, width, height);
-    let star = entities.makeStar(100, 100, 5, 5, 'purple');
-    ecs.addEntities(gameState, star, enemy);
-    
-    console.log(ecs);
-    starSpawnerSystem.process(ecs);
-    velocitySystem.process(ecs);
-    initBackgroundSystem.process(ecs);
-    boxRenderSystem.process(ecs);
+    let gameState = entities.makeGameState(10, 10, 800, 800, width, height);
+    // let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
+    // let star = entities.makeStar(100, 100, 4, 2, 5, 5, 'purple');
+    ecs.addEntities(gameState);
+    ecs.addEntity({
+        starSpawner: {
+            cooldown: 0,
+            baseCooldown: 20
+        }
+    })
+    setInterval(() => {
+        ecs.updateManager();
+        starSpawnerSystem.process(ecs);
+        velocitySystem.process(ecs);
+        initBackgroundSystem.process(ecs);
+        boxRenderSystem.process(ecs);
+    }, 1000/30);
 }
 },{"./ECS":1,"./entities":2,"./systems":5}],4:[function(require,module,exports){
 function isSuperset(set, subset) {
@@ -288,6 +307,7 @@ function difference(setA, ...sets) {
 
 module.exports = { isSuperset, union, intersection, difference };
 },{}],5:[function(require,module,exports){
+const entities = require('./entities');
 
 function HealthSystem(debug=false) {
     this.filter = ['health'];
@@ -342,28 +362,30 @@ function BlankSystem(debug=false) {
     }
 }
 
+// TODO: put this somewhere else
+const rand = (min, max) => Math.random() * (max - min) + min;
+
 function StarSpawnerSystem(debug=false) {
     this.filter = [];
     this.debug = debug;
-    console.log('created star spawner');
     this.process = function(ecs) {
-        console.log('running star spawner');
         // HACK: seriously?
-        
-        // let gameStateGuid = ecs.filter('gameState').values().next().value;
         // let gameStateGuid = Array.from(ecs.filter('gameState'))[0];
-        let gameStateGuid = ecs.getFirst('gameState');
-        let gameState = ecs.hash[gameStateGuid];
-        this.debug && console.log(`found gameState: ${gameState}`);
         // HACK: ugly naming, perhaps more granularity is needed
-        let { xMin, yMin, xMax, yMax } = gameState.gameState;
+        let gameState = ecs.hash[ecs.getFirst('gameState')].gameState;
+        let starSpawner = ecs.hash[ecs.getFirst('starSpawner')].starSpawner;
+        this.debug && console.log(`found gameState: ${gameState}`);
+        this.debug && console.log(`found starSpawner: ${starSpawner}`);
+        let { xMin, yMin, xMax, yMax } = gameState;
+        starSpawner.cooldown = Math.max(starSpawner.cooldown - 1, 0);
+        if (starSpawner.cooldown === 0) {
+            starSpawner.baseCooldown = ~~rand(2, 10);
+            starSpawner.cooldown = starSpawner.baseCooldown;
+            let closeness = rand(0.1, 1);
+            let star = entities.makeStar(xMax, rand(yMin, yMax), -closeness*30, 0, closeness*5, closeness*5, 'white');
+            ecs.addEntity(star);
+        }
         this.debug && console.log(`bounds:`, xMin, yMin, xMax, yMax);
-        // let guids = ecs.filter(...this.filter);
-        // this.debug && console.log(`running blank on ${ecs.names(guids)}`);
-        // for (let guid of guids) {
-        //     let entity = ecs.hash[guid];
-        //     this.debug && console.log(``);
-        // }
     }
 }
 
@@ -453,4 +475,4 @@ module.exports = {
     StarSpawnerSystem,
     BlankSystem
 };
-},{}]},{},[3]);
+},{"./entities":2}]},{},[3]);

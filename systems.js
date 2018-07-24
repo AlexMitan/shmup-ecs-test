@@ -1,3 +1,4 @@
+const entities = require('./entities');
 
 function HealthSystem(debug=false) {
     this.filter = ['health'];
@@ -52,27 +53,30 @@ function BlankSystem(debug=false) {
     }
 }
 
+// TODO: put this somewhere else
+const rand = (min, max) => Math.random() * (max - min) + min;
+
 function StarSpawnerSystem(debug=false) {
     this.filter = [];
     this.debug = debug;
-    console.log('created star spawner');
     this.process = function(ecs) {
-        console.log('running star spawner');
-        
         // HACK: seriously?
         // let gameStateGuid = Array.from(ecs.filter('gameState'))[0];
-        let gameStateGuid = ecs.getFirst('gameState');
-        let gameState = ecs.hash[gameStateGuid];
-        this.debug && console.log(`found gameState: ${gameState}`);
         // HACK: ugly naming, perhaps more granularity is needed
-        let { xMin, yMin, xMax, yMax } = gameState.gameState;
+        let gameState = ecs.hash[ecs.getFirst('gameState')].gameState;
+        let starSpawner = ecs.hash[ecs.getFirst('starSpawner')].starSpawner;
+        this.debug && console.log(`found gameState: ${gameState}`);
+        this.debug && console.log(`found starSpawner: ${starSpawner}`);
+        let { xMin, yMin, xMax, yMax } = gameState;
+        starSpawner.cooldown = Math.max(starSpawner.cooldown - 1, 0);
+        if (starSpawner.cooldown === 0) {
+            starSpawner.baseCooldown = ~~rand(2, 10);
+            starSpawner.cooldown = starSpawner.baseCooldown;
+            let closeness = rand(0.1, 1);
+            let star = entities.makeStar(xMax, rand(yMin, yMax), -closeness*30, 0, closeness*5, closeness*5, 'white');
+            ecs.addEntity(star);
+        }
         this.debug && console.log(`bounds:`, xMin, yMin, xMax, yMax);
-        // let guids = ecs.filter(...this.filter);
-        // this.debug && console.log(`running blank on ${ecs.names(guids)}`);
-        // for (let guid of guids) {
-        //     let entity = ecs.hash[guid];
-        //     this.debug && console.log(``);
-        // }
     }
 }
 
