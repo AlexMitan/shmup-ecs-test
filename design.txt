@@ -1,0 +1,13 @@
+Star
+    Behaviour:
+        Get spawned at a random interval
+        Be rendered according to closeness
+        Move left according to closeness 
+        Be cleaned up
+    Data:
+        w, h
+        pos x, y
+        vel x, y
+        svg
+        fill
+        oob / dead
