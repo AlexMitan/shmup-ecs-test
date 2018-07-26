@@ -18,9 +18,10 @@ function makeStar(x, y, vx, vy, w, h, fill) {
 const FILTER_PLAYER        = 0b00001;
 const FILTER_ENEMIES       = 0b00010;
 const FILTER_PLAYERBULLETS = 0b00100;
-function makePlayer(x, y, w, h, fill, health, damage, fireRate) {
+function makePlayer(x, y, w, h, fill, health, damage, shotCooldown) {
     return {
-        render: Object.assign({}, makeRect(w, h), {fill}),
+        player: true,
+        render: Object.assign(makeRect(w, h), {fill}),
         collision: {
             box: makeRect(w, h),
             layer: FILTER_PLAYER,
@@ -36,9 +37,28 @@ function makePlayer(x, y, w, h, fill, health, damage, fireRate) {
             y: 0,
             fire: 0
         },
+        shooting: {
+            damage: damage,
+            cooldown: 0,
+            baseCooldown: shotCooldown
+        },
+        friction: 0.1,
         position: vec(x, y),
         velocity: vec(0, 0)
     };
+}
+function makeBullet(x, y, w, h, vx, vy, fill, damage) {
+    return {
+        render: Object.assign(makeRect(w, h), {fill}),
+        collision: {
+            box: makeRect(w, h),
+            layer: FILTER_PLAYERBULLETS,
+            collidesWith: FILTER_ENEMIES,
+        },
+        damage,
+        position: vec(x, y),
+        velocity: vec(vx, vy)
+    }
 }
 function makeEnemy(x, y, w, h, fill, health, damage) {
     return {
@@ -77,4 +97,4 @@ function makeStarSpawner() {
 // console.log(makeRect(10, 11, 20, 30));
 console.log(makeStar(10, 10, 5, 5, 'white'));
 
-module.exports = { makeEnemy, makePlayer, makeStar, makeGameState };
+module.exports = { makeEnemy, makePlayer, makeStar, makeGameState, makeBullet };

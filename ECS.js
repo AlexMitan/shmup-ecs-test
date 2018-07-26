@@ -1,4 +1,9 @@
 const setOps = require('./setOps');
+
+function ensure(cond, message) {
+    if (!cond) throw message;
+}
+
 class ECS {
     constructor() {
         // { 0:entity, 1:undefined, 2:entity }
@@ -14,6 +19,7 @@ class ECS {
         }
     }
     addEntity(entity) {
+        ensure(typeof entity === 'object', `Entity ${entity} is not an object`);
         // assign a guid if there is none
         if (entity.guid === undefined) entity.guid = this.guid++;
         let guid = entity.guid;
@@ -22,6 +28,17 @@ class ECS {
         throw `Existing entity at id ${guid}: ${this.hash[guid]}`;
         // add entity to hash
         this.hash[guid] = entity;
+        // add entity to manager
+        for (let component in entity) {
+            if (entity.hasOwnProperty(component)) {
+                // for each component in the object, add it to manager
+                if (this.manager[component] === undefined) {
+                    this.manager[component] = new Set([guid]);
+                } else {
+                    this.manager[component].add(guid);
+                }
+            }
+        }
     }
     getFirst(...components) {
         return Array.from(this.filter(...components))[0];
@@ -51,6 +68,22 @@ class ECS {
             console.log(`WARNING: system ${system} does not have a process(ecs) method defined.`);
         }
     }
+    updateGuid(guid) {
+        ensure(this.hash[guid] !== undefined, `No entity mapped at guid ${guid}!`);
+        this.updateEntity(this.hash[guid]);
+    }
+    updateEntity(entity) {
+        ensure(typeof entity === 'object', `Entity ${entity} is not an object`);
+        for (const component in this.manager) {
+            if (this.manager.hasOwnProperty(component)) {
+                if (entity[component] === undefined) {
+                    this.manager[component].delete(entity.guid);
+                } else {
+                    this.manager[component].add(entity.guid);
+                }
+            }
+        }
+    }
     updateManager() {
         this.manager = {};
         for (const guid in this.hash) {
@@ -61,8 +94,10 @@ class ECS {
                     if (entity.hasOwnProperty(component)) {
                         // for each component in the object
                         if (this.manager[component] === undefined) {
+                            // add set if undefined
                             this.manager[component] = new Set([guid]);
                         } else {
+                            // add to set if existing component type
                             this.manager[component].add(guid);
                         }
                     }
@@ -71,9 +106,12 @@ class ECS {
         }
     }
     filter(...components) {
-        let set = this.manager[components[0]];
+        let { manager } = this;
+        let set = manager[components[0]] === undefined ? new Set() : manager[components[0]];
         for (let component of components) {
-            set = setOps.intersection(this.manager[component]);
+            if (manager[component] !== undefined) {
+                set = setOps.intersection(set, manager[component]);
+            }
         }
         return set;
         // return setOps.intersection(...components.map(comp => this.manager[comp]));
@@ -86,7 +124,7 @@ class ECS {
         return arr;
     }
 }
-if (false) {
+if (true) {
     let ecs = new ECS();
     let player = {
         name: 'player',
@@ -116,15 +154,19 @@ if (false) {
         velocity: {x: 0, y: -3},
         friction: 0.5,
         sprite: './fire.png',
-        health: {
-            whatever: 5
-        }
     }
     ecs.addEntity(player);
-    ecs.addEntity(enemy);
-    ecs.addEntity(flame);
-    
     console.log(ecs.names(ecs.filter('position', 'velocity')));
+    ecs.addEntity(enemy);
+    console.log(ecs.names(ecs.filter('position', 'velocity')));
+    ecs.addEntity(flame);
+    console.log(ecs.names(ecs.filter('position', 'velocity')));
+    // ecs.removeEntity(flame);
+    // delete flame.position;
+    flame.position = undefined;
+    ecs.updateGuid(flame.guid);
+    console.log(ecs.names(ecs.filter('position', 'velocity')));
+    // ecs.updateManager();
 }
 
 module.exports = { ECS };

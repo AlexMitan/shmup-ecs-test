@@ -24,28 +24,25 @@ window.onload = () => {
     
     let ecs = new ECS();
     
-    
-    let velocitySystem = new systems.VelocitySystem();
-    let initBackgroundSystem = new systems.InitBackgroundSystem(svg);
-    let boxRenderSystem = new systems.BoxRenderSystem(svg);
-    let starSpawnerSystem = new systems.StarSpawnerSystem();
+    let sys = [
+        new systems.VelocitySystem(),
+        new systems.InitBackgroundSystem(svg),
+        new systems.StarSpawnerSystem(),
+        new systems.ApplyInputSystem(keysDown),
+        new systems.OutOfBoundsSystem(),
+        new systems.BoxRenderSystem(svg),
+        new systems.CleanupSystem(),
+    ]
     // let blankSystem = new systems.BlankSystem();
 
     let gameState = entities.makeGameState(10, 10, 800, 800, width, height);
-    // let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
+    let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
     // let star = entities.makeStar(100, 100, 4, 2, 5, 5, 'purple');
-    ecs.addEntities(gameState);
-    ecs.addEntity({
-        starSpawner: {
-            cooldown: 0,
-            baseCooldown: 20
-        }
-    })
+    ecs.addEntities(gameState, entities.makePlayer(100, 100, 50, 30, 'yellow', 10, 2, 5));
     setInterval(() => {
         ecs.updateManager();
-        starSpawnerSystem.process(ecs);
-        velocitySystem.process(ecs);
-        initBackgroundSystem.process(ecs);
-        boxRenderSystem.process(ecs);
+        for (let system of sys) {
+            system.process(ecs);
+        }
     }, 1000/30);
 }
