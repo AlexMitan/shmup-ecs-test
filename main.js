@@ -233,12 +233,13 @@ function makePlayer(x, y, w, h, fill, health, damage, shotCooldown) {
             cooldown: 0,
             baseCooldown: shotCooldown
         },
+        damageOnContact: 99,
         friction: 0.1,
         position: vec(x, y),
         velocity: vec(0, 0)
     };
 }
-function makeBullet(x, y, w, h, vx, vy, fill, damage) {
+function makeBullet(x, y, w, h, vx, vy, fill, damageOnContact) {
     return {
         render: Object.assign(makeRect(w, h), {fill}),
         collision: {
@@ -246,13 +247,13 @@ function makeBullet(x, y, w, h, vx, vy, fill, damage) {
             layer: FILTER_PLAYERBULLETS,
             collidesWith: FILTER_ENEMIES,
         },
-        damage,
+        damageOnContact,
         bullet: true,
         position: vec(x, y),
         velocity: vec(vx, vy)
     }
 }
-function makeEnemy(x, y, w, h, fill, health, damage) {
+function makeEnemy(x, y, w, h, fill, health, damageOnContact) {
     return {
         render: Object.assign({}, makeRect(w, h), { fill }),
         collision: {
@@ -265,6 +266,7 @@ function makeEnemy(x, y, w, h, fill, health, damage) {
             current: health, 
             regen: 0
         },
+        damageOnContact,
         position: vec(x, y),
         velocity: vec(0, 0)
     };
@@ -488,7 +490,7 @@ function EnemySpawnerSystem(debug=false) {
         if (this.cooldown === 0) {
             // new cooldown
             this.cooldown = ~~rand(10, 20);
-            let enemy = entities.makeEnemy(xMax, rand(yMin, yMax), 40, 30, 'grey', 10, 3);
+            let enemy = entities.makeEnemy(xMax, rand(yMin, yMax), 40, 30, 'grey', 10, 4);
             enemy.velocity = {x:-3, y:1};
             ecs.addEntity(enemy);
         }
@@ -593,8 +595,8 @@ function CollisionSystem(debug=false) {
                     let { layer: otherLayer, collidesWith: otherCollideswith } = otherEntity.collision;
                     if (boxIntersect(x0, y0, w0, h0, x1, y1, w1, h1)) {
                         if (collidesWith & otherLayer) {
-                            if (entity.damage && otherEntity.health) {
-                                otherEntity.health.current -= entity.damage;
+                            if (entity.damageOnContact && otherEntity.health) {
+                                otherEntity.health.current -= entity.damageOnContact;
                             }
                             if (entity.bullet) entity.dead = true;
                             // ecs.addEntity(entities.makeExplosion(x0, y0, 30, 300, 'cyan'));

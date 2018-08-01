@@ -95,7 +95,7 @@ function EnemySpawnerSystem(debug=false) {
         if (this.cooldown === 0) {
             // new cooldown
             this.cooldown = ~~rand(10, 20);
-            let enemy = entities.makeEnemy(xMax, rand(yMin, yMax), 40, 30, 'grey', 10, 3);
+            let enemy = entities.makeEnemy(xMax, rand(yMin, yMax), 40, 30, 'grey', 10, 4);
             enemy.velocity = {x:-3, y:1};
             ecs.addEntity(enemy);
         }
@@ -200,8 +200,8 @@ function CollisionSystem(debug=false) {
                     let { layer: otherLayer, collidesWith: otherCollideswith } = otherEntity.collision;
                     if (boxIntersect(x0, y0, w0, h0, x1, y1, w1, h1)) {
                         if (collidesWith & otherLayer) {
-                            if (entity.damage && otherEntity.health) {
-                                otherEntity.health.current -= entity.damage;
+                            if (entity.damageOnContact && otherEntity.health) {
+                                otherEntity.health.current -= entity.damageOnContact;
                             }
                             if (entity.bullet) entity.dead = true;
                             // ecs.addEntity(entities.makeExplosion(x0, y0, 30, 300, 'cyan'));

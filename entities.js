@@ -41,12 +41,13 @@ function makePlayer(x, y, w, h, fill, health, damage, shotCooldown) {
             cooldown: 0,
             baseCooldown: shotCooldown
         },
+        damageOnContact: 99,
         friction: 0.1,
         position: vec(x, y),
         velocity: vec(0, 0)
     };
 }
-function makeBullet(x, y, w, h, vx, vy, fill, damage) {
+function makeBullet(x, y, w, h, vx, vy, fill, damageOnContact) {
     return {
         render: Object.assign(makeRect(w, h), {fill}),
         collision: {
@@ -54,13 +55,13 @@ function makeBullet(x, y, w, h, vx, vy, fill, damage) {
             layer: FILTER_PLAYERBULLETS,
             collidesWith: FILTER_ENEMIES,
         },
-        damage,
+        damageOnContact,
         bullet: true,
         position: vec(x, y),
         velocity: vec(vx, vy)
     }
 }
-function makeEnemy(x, y, w, h, fill, health, damage) {
+function makeEnemy(x, y, w, h, fill, health, damageOnContact) {
     return {
         render: Object.assign({}, makeRect(w, h), { fill }),
         collision: {
@@ -73,6 +74,7 @@ function makeEnemy(x, y, w, h, fill, health, damage) {
             current: health, 
             regen: 0
         },
+        damageOnContact,
         position: vec(x, y),
         velocity: vec(0, 0)
     };
