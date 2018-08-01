@@ -52,10 +52,10 @@ class ECS {
             this.addToManager(component, guid);
         }
     }
-    getFirst(...components) {
-        return Array.from(this.filterGuids(...components))[0];
+    getFirst(components) {
+        return Array.from(this.filterGuids(components))[0];
     }
-    removeEntities(...entities) {
+    removeEntities(entities) {
         for (let entity of entities) {
             this.removeEntity(entity);
         }
@@ -114,7 +114,7 @@ class ECS {
             }
         }
     }
-    filterGuids(...components) {
+    filterGuids(components) {
         let { manager } = this;
         if (!has(manager, components[0])) return new Set();
         let set = manager[components[0]];
@@ -127,8 +127,8 @@ class ECS {
         }
         return set;
     }
-    filterEntities(...components) {
-        return Array.from(this.filterGuids(...components)).map(guid => this.hash[guid]);
+    filterEntities(components) {
+        return Array.from(this.filterGuids(components)).map(guid => this.hash[guid]);
     }
     names(set) {
         let arr = [];
@@ -175,17 +175,16 @@ if (true) {
     ecs.addEntity(flame);
     // ecs.removeEntity(flame);
     // delete flame.position;
-    console.log(ecs.names(ecs.filterGuids('position')));
-    console.log(ecs.names(ecs.filterGuids('heat')));
+    console.log(ecs.names(ecs.filterGuids(['position'])));
+    console.log(ecs.names(ecs.filterGuids(['heat'])));
 
     flame.position = undefined;
     flame.heat = 5;
     // ecs.updateEntity(flame);
     ecs.updateGuid(flame.guid);
     // ecs.updateManager();
-    console.log(ecs.names(ecs.filterGuids('position')));
-    console.log(ecs.names(ecs.filterGuids('heat')));
-    console.log(ecs.names(ecs.filterGuids('heat')));
+    console.log(ecs.names(ecs.filterGuids(['position'])));
+    console.log(ecs.names(ecs.filterGuids(['name','heat'])));
 }
 
 module.exports = { ECS };

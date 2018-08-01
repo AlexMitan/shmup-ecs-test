@@ -43,7 +43,7 @@ window.onload = () => {
     let gameState = entities.makeGameState(10, 10, 800, 800, width, height);
     let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
     // let star = entities.makeStar(100, 100, 4, 2, 5, 5, 'purple');
-    ecs.addEntities(gameState, entities.makePlayer(100, 100, 50, 30, 'yellow', 10, 2, 5));
+    ecs.addEntities(gameState, entities.makePlayer(100, 100, 50, 30, 'yellow', 10, 2, 20));
     function update() {
         ecs.updateManager();
         for (let system of sys) {
