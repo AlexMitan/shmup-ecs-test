@@ -1,13 +1,12 @@
 function makeRect(w, h) {
     return { w, h };
 }
-function vec(x, y, vx, vy) {
+function vec(x, y) {
     return { x, y };
 }
 
 function makeStar(x, y, vx, vy, w, h, fill) {
     return {
-        // render: Object.assign({}, makeRect(w, h), {fill}),
         render: {
             w: w, h: h, fill: fill
         },
@@ -56,6 +55,7 @@ function makeBullet(x, y, w, h, vx, vy, fill, damage) {
             collidesWith: FILTER_ENEMIES,
         },
         damage,
+        bullet: true,
         position: vec(x, y),
         velocity: vec(vx, vy)
     }
@@ -78,23 +78,21 @@ function makeEnemy(x, y, w, h, fill, health, damage) {
     };
 }
 
+function makeExplosion(x, y, size, duration, fill) {
+    return {
+        explosion: { x, y, size, duration, fill }
+    }
+}
+
 function makeGameState(xMin, yMin, xMax, yMax, width, height) {
     return {
         gameState: {
             xMin, yMin, xMax, yMax,
             windowWidth: width,
-            windowHeight: height
+            windowHeight: height,
+            fps: 30
         }
     }
 }
-function makeStarSpawner() {
-    return {
-        starSpawner: {
-            starSpawner: true
-        }
-    }
-}
-// console.log(makeRect(10, 11, 20, 30));
-console.log(makeStar(10, 10, 5, 5, 'white'));
 
-module.exports = { makeEnemy, makePlayer, makeStar, makeGameState, makeBullet };
+module.exports = { makeEnemy, makePlayer, makeStar, makeGameState, makeBullet, makeExplosion };

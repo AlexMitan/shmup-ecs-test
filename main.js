@@ -1,5 +1,24 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 const setOps = require('./setOps');
+
+function ensure(cond, message) {
+    if (!cond) throw message;
+}
+
+function props(obj) {
+    let arr = [];
+    for (let property in obj) {
+        if (obj.hasOwnProperty(property) && obj[property] != undefined) {
+            arr.push(property);
+        }
+    }
+    return arr;
+}
+
+function has(obj, prop) {
+    return obj.hasOwnProperty(prop) && obj[prop] != undefined;
+}
+
 class ECS {
     constructor() {
         // { 0:entity, 1:undefined, 2:entity }
@@ -15,17 +34,27 @@ class ECS {
         }
     }
     addEntity(entity) {
+        ensure(typeof entity === 'object', `Entity ${entity} is not an object`);
         // assign a guid if there is none
-        if (entity.guid === undefined) entity.guid = this.guid++;
+        if (entity.guid == undefined) entity.guid = this.guid++;
         let guid = entity.guid;
-        // if there's already an entity there, throw error
-        if (this.hash[guid] !== undefined)
-        throw `Existing entity at id ${guid}: ${this.hash[guid]}`;
+        // if there's already an entity there, throw error if different entity
+        if (this.hash[guid] != undefined) {
+            if (this.hash[guid] === entity) {
+                console.log(`re-adding entity at guid ${guid}`);
+            } else {
+                throw `ECS.addEntity(entity): Existing entity at id ${guid}: ${this.hash[guid]}`;
+            }
+        }
         // add entity to hash
         this.hash[guid] = entity;
+        // add entity to manager
+        for (let component of props(entity)) {
+            this.addToManager(component, guid);
+        }
     }
     getFirst(...components) {
-        return Array.from(this.filter(...components))[0];
+        return Array.from(this.filterGuids(...components))[0];
     }
     removeEntities(...entities) {
         for (let entity of entities) {
@@ -37,57 +66,81 @@ class ECS {
         // remove entity from hash
         delete this.hash[guid]
         // remove entity from manager
-        for (let component in entity) {
-            if (entity.hasOwnProperty(component)) {
-                // each manager removes the id from the list
-                this.manager[component].delete(guid);
-                // TODO: collapse manager?
-            }
+        for (let component of props(entity)) {
+            // each manager removes the id from the list
+            this.manager[component].delete(guid);
         }
     }
     addSystem(system) {
         // TODO: more to do here?
         this.systems.push(system);
-        if (system.process === undefined) {
+        if (system.process == undefined) {
             console.log(`WARNING: system ${system} does not have a process(ecs) method defined.`);
+        }
+    }
+    updateGuid(guid) {
+        ensure(this.hash[guid] != undefined, `No entity mapped at guid ${guid}!`);
+        this.updateEntity(this.hash[guid]);
+    }
+    updateEntity(entity) {
+        ensure(typeof entity === 'object', `ECS.updateEntity(entity): Entity ${entity} is not an object`);
+        ensure(entity.guid != undefined, `ECS.updateEntity(entity): Entity ${entity} has no guid!`);
+        // components in manager but no longer in entity
+        for (let component of props(this.manager)) {
+            if (!has(entity, component)) {
+                this.manager[component].delete(entity.guid);
+            }
+        }
+        // add entity components to manager
+        for (let component of props(entity)) {
+            this.addToManager(component, entity.guid);
+        }
+    }
+    addToManager(component, guid) {
+        if (has(this.manager, component)) {
+            // add to set if existing component type
+            this.manager[component].add(guid);
+        } else {
+            // add set if new component type
+            this.manager[component] = (guid == undefined ? new Set() : new Set([guid]));
         }
     }
     updateManager() {
         this.manager = {};
-        for (const guid in this.hash) {
-            if (this.hash.hasOwnProperty(guid)) {
-                const entity = this.hash[guid];
-                // add entity to manager
-                for (let component in entity) {
-                    if (entity.hasOwnProperty(component)) {
-                        // for each component in the object
-                        if (this.manager[component] === undefined) {
-                            this.manager[component] = new Set([guid]);
-                        } else {
-                            this.manager[component].add(guid);
-                        }
-                    }
-                }
+        for (let guid of props(this.hash)) {
+            const entity = this.hash[guid];
+            // for each component in the object, add to manager
+            for (let component of props(entity)) {
+                this.addToManager(component, guid);
             }
         }
     }
-    filter(...components) {
-        let set = this.manager[components[0]];
-        for (let component of components) {
-            set = setOps.intersection(this.manager[component]);
+    filterGuids(...components) {
+        let { manager } = this;
+        if (!has(manager, components[0])) return new Set();
+        let set = manager[components[0]];
+        for (let component of components.slice(1)) {
+            if (has(manager, component)) {
+                set = setOps.intersection(set, manager[component]);
+            } else {
+                return new Set();
+            }
         }
         return set;
-        // return setOps.intersection(...components.map(comp => this.manager[comp]));
+    }
+    filterEntities(...components) {
+        return Array.from(this.filterGuids(...components)).map(guid => this.hash[guid]);
     }
     names(set) {
         let arr = [];
         for (let id of set) {
-            arr.push(this.hash[id] && this.hash[id].name);
+            ensure(has(this.hash, id), `ECS.names(set): Guid ${id} not in hash.`);
+            arr.push(this.hash[id].name);
         }
         return arr;
     }
 }
-if (false) {
+if (true) {
     let ecs = new ECS();
     let player = {
         name: 'player',
@@ -117,15 +170,23 @@ if (false) {
         velocity: {x: 0, y: -3},
         friction: 0.5,
         sprite: './fire.png',
-        health: {
-            whatever: 5
-        }
     }
     ecs.addEntity(player);
     ecs.addEntity(enemy);
     ecs.addEntity(flame);
-    
-    console.log(ecs.names(ecs.filter('position', 'velocity')));
+    // ecs.removeEntity(flame);
+    // delete flame.position;
+    console.log(ecs.names(ecs.filterGuids('position')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
+
+    flame.position = undefined;
+    flame.heat = 5;
+    // ecs.updateEntity(flame);
+    ecs.updateGuid(flame.guid);
+    // ecs.updateManager();
+    console.log(ecs.names(ecs.filterGuids('position')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
 }
 
 module.exports = { ECS };
@@ -133,13 +194,12 @@ module.exports = { ECS };
 function makeRect(w, h) {
     return { w, h };
 }
-function vec(x, y, vx, vy) {
+function vec(x, y) {
     return { x, y };
 }
 
 function makeStar(x, y, vx, vy, w, h, fill) {
     return {
-        // render: Object.assign({}, makeRect(w, h), {fill}),
         render: {
             w: w, h: h, fill: fill
         },
@@ -188,6 +248,7 @@ function makeBullet(x, y, w, h, vx, vy, fill, damage) {
             collidesWith: FILTER_ENEMIES,
         },
         damage,
+        bullet: true,
         position: vec(x, y),
         velocity: vec(vx, vy)
     }
@@ -210,26 +271,24 @@ function makeEnemy(x, y, w, h, fill, health, damage) {
     };
 }
 
+function makeExplosion(x, y, size, duration, fill) {
+    return {
+        explosion: { x, y, size, duration, fill }
+    }
+}
+
 function makeGameState(xMin, yMin, xMax, yMax, width, height) {
     return {
         gameState: {
             xMin, yMin, xMax, yMax,
             windowWidth: width,
-            windowHeight: height
+            windowHeight: height,
+            fps: 30
         }
     }
 }
-function makeStarSpawner() {
-    return {
-        starSpawner: {
-            starSpawner: true
-        }
-    }
-}
-// console.log(makeRect(10, 11, 20, 30));
-console.log(makeStar(10, 10, 5, 5, 'white'));
 
-module.exports = { makeEnemy, makePlayer, makeStar, makeGameState, makeBullet };
+module.exports = { makeEnemy, makePlayer, makeStar, makeGameState, makeBullet, makeExplosion };
 
 },{}],3:[function(require,module,exports){
 window.onload = () => {
@@ -259,12 +318,17 @@ window.onload = () => {
     let ecs = new ECS();
     
     let sys = [
-        new systems.VelocitySystem(),
         new systems.InitBackgroundSystem(svg),
         new systems.StarSpawnerSystem(),
+        new systems.EnemySpawnerSystem(),
         new systems.ApplyInputSystem(keysDown),
         new systems.OutOfBoundsSystem(),
+        new systems.CollisionSystem(),
+        new systems.NoHealthSystem(),
+        new systems.VelocitySystem(),
+        new systems.ExplosionSystem(svg),
         new systems.BoxRenderSystem(svg),
+        new systems.HealthBarSystem(svg),
         new systems.CleanupSystem(),
     ]
     // let blankSystem = new systems.BlankSystem();
@@ -273,12 +337,16 @@ window.onload = () => {
     let enemy = entities.makeEnemy(10, 10, 30, 30, 'red', 8, 2);
     // let star = entities.makeStar(100, 100, 4, 2, 5, 5, 'purple');
     ecs.addEntities(gameState, entities.makePlayer(100, 100, 50, 30, 'yellow', 10, 2, 5));
-    setInterval(() => {
+    function update() {
         ecs.updateManager();
         for (let system of sys) {
             system.process(ecs);
         }
-    }, 1000/30);
+        // requestAnimationFrame(update);
+    }
+    // update();
+    setInterval(update, 1000/60);
+
 }
 },{"./ECS":1,"./entities":2,"./systems":5}],4:[function(require,module,exports){
 function isSuperset(set, subset) {
@@ -326,11 +394,21 @@ module.exports = { isSuperset, union, intersection, difference };
 },{}],5:[function(require,module,exports){
 const entities = require('./entities');
 
+function props(obj) {
+    let arr = [];
+    for (let property in obj) {
+        if (obj.hasOwnProperty(property) && obj[property] != undefined) {
+            arr.push(property);
+        }
+    }
+    return arr;
+}
+
 function HealthSystem(debug=false) {
     this.filter = ['health'];
     this.debug = debug;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         this.debug && console.log(`running health on ${ecs.names(guids)}`);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
@@ -350,7 +428,7 @@ function VelocitySystem(debug=false) {
     this.filter = ['position', 'velocity'];
     this.debug = debug;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         this.debug && console.log(`running physics on ${ecs.names(guids)}`);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
@@ -370,7 +448,7 @@ function BlankSystem(debug=false) {
     this.filter = [];
     this.debug = debug;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         this.debug && console.log(`running blank on ${ecs.names(guids)}`);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
@@ -386,12 +464,8 @@ function StarSpawnerSystem(debug=false) {
     this.debug = debug;
     this.cooldown = 10;
     this.process = function(ecs) {
-        // HACK: seriously?
-        // let gameStateGuid = Array.from(ecs.filter('gameState'))[0];
         // HACK: ugly naming, perhaps more granularity is needed
         let gameState = ecs.hash[ecs.getFirst('gameState')].gameState;
-        // this.debug && console.log(`found gameState: ${gameState}`);
-        // this.debug && console.log(`found starSpawner: ${starSpawner}`);
         let { xMin, yMin, xMax, yMax } = gameState;
         this.cooldown = Math.max(this.cooldown - 1, 0);
         if (this.cooldown === 0) {
@@ -404,6 +478,24 @@ function StarSpawnerSystem(debug=false) {
         this.debug && console.log(`bounds:`, xMin, yMin, xMax, yMax);
     }
 }
+function EnemySpawnerSystem(debug=false) {
+    this.debug = debug;
+    this.cooldown = 20;
+    this.process = function(ecs) {
+        // HACK: ugly naming, perhaps more granularity is needed
+        let gameState = ecs.hash[ecs.getFirst('gameState')].gameState;
+        let { xMin, yMin, xMax, yMax } = gameState;
+        this.cooldown = Math.max(this.cooldown - 1, 0);
+        if (this.cooldown === 0) {
+            // new cooldown
+            this.cooldown = ~~rand(10, 20);
+            let enemy = entities.makeEnemy(xMax, rand(yMin, yMax), 40, 30, 'grey', 10, 3);
+            enemy.velocity = {x:-3, y:1};
+            ecs.addEntity(enemy);
+        }
+        this.debug && console.log(`bounds:`, xMin, yMin, xMax, yMax);
+    }
+}
 
 function OutOfBoundsSystem(debug=false) {
     this.filter = ['position'];
@@ -411,7 +503,7 @@ function OutOfBoundsSystem(debug=false) {
     this.process = function(ecs) {
         let gameState = ecs.hash[ecs.getFirst('gameState')].gameState;
         let { xMin, yMin, xMax, yMax } = gameState;
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         this.debug && console.log(`running OOBSystem on ${ecs.names(guids)}`);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
@@ -437,47 +529,86 @@ function CleanupSystem(debug=false) {
     this.filter = ['dead'];
     this.debug = debug;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
-            if (entity.render && entity.render.svg) entity.render.svg.remove();
+            if (entity.render) {
+                // entity.render.svg.remove();
+                for (let prop of props(entity.render)) {
+                    if (prop.slice(0, 3) === 'svg') {
+                        entity.render[prop].remove();
+                    }
+                }
+            }
             ecs.removeEntity(entity);
         }
     }
-
 }
+
+function svgRect(svg, w, h, fill='blue') {
+    return svg.append(`rect`)
+        .attrs({'x':0, 'y':0, 'width':w, 'height':h, 'fill':fill})
+}
+const getTransform = (x, y, ang=0, scale=1) => `translate(${x} ${y})` + `rotate(${ang})` + `scale(${scale})`;
+
 function BoxRenderSystem(svg, debug=false) {
-    function svgRect(svg, x, y, w, h, fill='blue') {
-        return svg.append(`rect`)
-            .attrs({'width':w, 'height':h, 'fill':fill})
-            .attr('transform', getTransform(x-w/2, y-h/2))
-        // return svg.append('circle')
-        //         .attrs({'cx':x, 'cy':y, 'r':10, 'fill':fill})
-    }
-    const getTransform = (x, y, ang=0, scale=1) => `translate(${x} ${y})` + `rotate(${ang})` + `scale(${scale})`;
 
     this.filter = ['render', 'position'];
     this.debug = debug;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
-        this.debug && console.log(`running blank on ${ecs.names(guids)}`);
-        for (let guid of guids) {
-            let entity = ecs.hash[guid];
+        let entities = ecs.filterEntities(...this.filter);
+        for (let entity of entities) {
             let { w, h, fill } = entity.render;
             let { x, y } = entity.position;
-            if (!entity.render.svg) {
+            if (!entity.render.svgBox) {
                 // first time init
-                entity.render.svg = svgRect(svg, x - w/2, y - h/2, w, h, fill);
-            } else {
-                // update render
-                entity.render.svg.attr('transform', getTransform(x - w/2, y - h/2));
+                entity.render.svgBox = svgRect(svg, w, h, fill);
             }
+            // update render
+            entity.render.svgBox.attr('transform', getTransform(x - w/2, y - h/2));
             this.debug && console.log(``);
         }
     }
 }
 
+
 function CollisionSystem(debug=false) {
+    function rangeIntersect(min0, max0, min1, max1) {
+        return Math.max(min0, max0) >= Math.min(min1, max1) && Math.min(min0, max0) <= Math.max(min1, max1);
+    };
+    function rawIntersect(x0, y0, w0, h0, x1, y1, w1, h1) {
+        return rangeIntersect(x0, x0 + w0, x1, x1 + w1) && rangeIntersect(y0, y0 + h0, y1, y1 + h1);
+    }
+    this.filter = ['collision', 'position'];
+    this.debug = debug;
+    this.process = function(ecs) {
+        let entities = ecs.filterEntities(...this.filter);
+        for (let i=0; i<entities.length; i++) {
+            let entity = entities[i];
+            let { position: { x: x0, y: y0}, collision: { box: { w: w0, h: h0 }} } = entity;
+            let { layer, collidesWith } = entity.collision;
+            for (let j=0; j<entities.length; j++) {
+                if (i != j) {
+                    let otherEntity = entities[j];
+                    let { position: { x: x1, y: y1}, collision: { box: { w: w1, h: h1 }} } = otherEntity;
+                    let { layer: otherLayer, collidesWith: otherCollideswith } = otherEntity.collision;
+                    if (rawIntersect(x0, y0, w0, h0, x1, y1, w1, h1)) {
+                        if (collidesWith & otherLayer) {
+                            if (entity.damage && otherEntity.health) {
+                                otherEntity.health.current -= entity.damage;
+                            }
+                            if (entity.bullet) entity.dead = true;
+                            // ecs.addEntity(entities.makeExplosion(x0, y0, 30, 300, 'cyan'));
+                            ecs.addEntity({
+                                explosion: { x:x0, y:y0, size:30, duration:300, fill:"cyan" }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 function InitBackgroundSystem(svg, debug=false) {
@@ -485,7 +616,7 @@ function InitBackgroundSystem(svg, debug=false) {
     this.debug = debug;
     this.svg = svg;
     this.process = function(ecs) {
-        let guids = ecs.filter(...this.filter);
+        let guids = ecs.filterGuids(...this.filter);
         this.debug && console.log(`running gameBorder on ${ecs.names(guids)}`);
         for (let guid of guids) {
             let entity = ecs.hash[guid];
@@ -519,8 +650,76 @@ function InitBackgroundSystem(svg, debug=false) {
 
 }
 
+
+function HealthBarSystem(svg, debug=false) {
+    this.filter = ['health', 'render'];
+    this.debug = debug;
+    this.svg = svg;
+    let healthBarBaseLength = 40;
+    this.process = function(ecs) {
+        let entities = ecs.filterEntities(...this.filter);
+        for (let entity of entities) {
+            let { render, health: { base: baseHealth, current: currentHealth } } = entity;
+            let healthBarLength = healthBarBaseLength * currentHealth / baseHealth;
+            if (!render.svgHealthBar) {
+                // draw health bar
+                render.svgHealthBar = svgRect(svg, healthBarLength, 5, 'green');
+            }
+            // update health bar
+            let { x, y } = entity.position;
+            let w = 20, h = 20;
+            if (entity.collision && entity.collision.box) {
+                w = entity.collision.box.w;
+                h = entity.collision.box.h;
+            }
+            render.svgHealthBar.attr('transform', getTransform(x - healthBarLength/2, y - h));
+            render.svgHealthBar.attr('width', healthBarLength);
+        }
+    }
+}
+
+function NoHealthSystem(debug=false) {
+    this.filter = ['health'];
+    this.debug = debug;
+    this.process = function(ecs) {
+        let entities = ecs.filterEntities(...this.filter);
+        for (let entity of entities) {
+            let { health: { base: baseHealth, current: currentHealth }, position: {x, y} } = entity;
+            if (currentHealth <= 0) {
+                entity.dead = true;
+                ecs.addEntity({
+                    explosion: { x, y, size:50, duration:500, fill:"orange" }
+                });
+            }
+        }
+    }
+}
+
+function ExplosionSystem(svg, debug=false) {
+    this.filter = ['explosion'];
+    this.debug = debug;
+    this.svg = svg;
+
+    function boom(svg, x, y, size, duration, fill='orange') {
+        svg.append('ellipse')
+            .attrs({'cx': x, 'cy': y, 'rx': 0.1 * size, 'ry': 0.05 * size, 'fill': fill})
+            .transition()
+                .duration(duration)
+                .attrs({'rx': size, 'ry': size})
+                .style('opacity', 0)
+                .remove();
+    }
+
+    this.process = function(ecs) {
+        let entities = ecs.filterEntities(...this.filter);
+        for (let entity of entities) {
+            let { x, y, size, duration, fill } = entity.explosion;
+            boom(svg, x, y, size, duration, fill);
+            entity.dead = true;
+        }
+    }
+}
 function ApplyInputSystem(keysDown) {
-    
     const KEY_W = 87,
         KEY_S = 83,
         KEY_A = 65,
@@ -559,11 +758,11 @@ function ApplyInputSystem(keysDown) {
             if (keysDown[KEY_SPACE] && shooting.cooldown === 0) {
                 shooting.cooldown = shooting.baseCooldown;
                 let { x, y } = playerEntity.position;
-                // for (let i=0; i<2; i++) {
-                let bullet = entities.makeBullet(x + 30, y, 5, 2, 30, rand(-2, 2), 'cyan', shooting.damage);
-                bullet.friction = 0;
-                ecs.addEntity(bullet);
-                // }
+                for (let i=0; i<1; i++) {
+                    let bullet = entities.makeBullet(x + 30, y, 5, 2, 30, rand(-2, 2), 'cyan', shooting.damage);
+                    bullet.friction = 0;
+                    ecs.addEntity(bullet);
+                }
             }
 
         }
@@ -574,10 +773,14 @@ module.exports = {
     CollisionSystem,
     VelocitySystem, 
     HealthSystem, 
+    NoHealthSystem,
+    ExplosionSystem,
     InitBackgroundSystem, 
     ApplyInputSystem, 
     BoxRenderSystem, 
     StarSpawnerSystem,
+    HealthBarSystem,
+    EnemySpawnerSystem,
     BlankSystem,
     OutOfBoundsSystem,
     CleanupSystem

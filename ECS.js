@@ -4,6 +4,20 @@ function ensure(cond, message) {
     if (!cond) throw message;
 }
 
+function props(obj) {
+    let arr = [];
+    for (let property in obj) {
+        if (obj.hasOwnProperty(property) && obj[property] != undefined) {
+            arr.push(property);
+        }
+    }
+    return arr;
+}
+
+function has(obj, prop) {
+    return obj.hasOwnProperty(prop) && obj[prop] != undefined;
+}
+
 class ECS {
     constructor() {
         // { 0:entity, 1:undefined, 2:entity }
@@ -21,27 +35,25 @@ class ECS {
     addEntity(entity) {
         ensure(typeof entity === 'object', `Entity ${entity} is not an object`);
         // assign a guid if there is none
-        if (entity.guid === undefined) entity.guid = this.guid++;
+        if (entity.guid == undefined) entity.guid = this.guid++;
         let guid = entity.guid;
-        // if there's already an entity there, throw error
-        if (this.hash[guid] !== undefined)
-        throw `Existing entity at id ${guid}: ${this.hash[guid]}`;
+        // if there's already an entity there, throw error if different entity
+        if (this.hash[guid] != undefined) {
+            if (this.hash[guid] === entity) {
+                console.log(`re-adding entity at guid ${guid}`);
+            } else {
+                throw `ECS.addEntity(entity): Existing entity at id ${guid}: ${this.hash[guid]}`;
+            }
+        }
         // add entity to hash
         this.hash[guid] = entity;
         // add entity to manager
-        for (let component in entity) {
-            if (entity.hasOwnProperty(component)) {
-                // for each component in the object, add it to manager
-                if (this.manager[component] === undefined) {
-                    this.manager[component] = new Set([guid]);
-                } else {
-                    this.manager[component].add(guid);
-                }
-            }
+        for (let component of props(entity)) {
+            this.addToManager(component, guid);
         }
     }
     getFirst(...components) {
-        return Array.from(this.filter(...components))[0];
+        return Array.from(this.filterGuids(...components))[0];
     }
     removeEntities(...entities) {
         for (let entity of entities) {
@@ -53,73 +65,76 @@ class ECS {
         // remove entity from hash
         delete this.hash[guid]
         // remove entity from manager
-        for (let component in entity) {
-            if (entity.hasOwnProperty(component)) {
-                // each manager removes the id from the list
-                this.manager[component].delete(guid);
-                // TODO: collapse manager?
-            }
+        for (let component of props(entity)) {
+            // each manager removes the id from the list
+            this.manager[component].delete(guid);
         }
     }
     addSystem(system) {
         // TODO: more to do here?
         this.systems.push(system);
-        if (system.process === undefined) {
+        if (system.process == undefined) {
             console.log(`WARNING: system ${system} does not have a process(ecs) method defined.`);
         }
     }
     updateGuid(guid) {
-        ensure(this.hash[guid] !== undefined, `No entity mapped at guid ${guid}!`);
+        ensure(this.hash[guid] != undefined, `No entity mapped at guid ${guid}!`);
         this.updateEntity(this.hash[guid]);
     }
     updateEntity(entity) {
-        ensure(typeof entity === 'object', `Entity ${entity} is not an object`);
-        for (const component in this.manager) {
-            if (this.manager.hasOwnProperty(component)) {
-                if (entity[component] === undefined) {
-                    this.manager[component].delete(entity.guid);
-                } else {
-                    this.manager[component].add(entity.guid);
-                }
+        ensure(typeof entity === 'object', `ECS.updateEntity(entity): Entity ${entity} is not an object`);
+        ensure(entity.guid != undefined, `ECS.updateEntity(entity): Entity ${entity} has no guid!`);
+        // components in manager but no longer in entity
+        for (let component of props(this.manager)) {
+            if (!has(entity, component)) {
+                this.manager[component].delete(entity.guid);
             }
+        }
+        // add entity components to manager
+        for (let component of props(entity)) {
+            this.addToManager(component, entity.guid);
+        }
+    }
+    addToManager(component, guid) {
+        if (has(this.manager, component)) {
+            // add to set if existing component type
+            this.manager[component].add(guid);
+        } else {
+            // add set if new component type
+            this.manager[component] = (guid == undefined ? new Set() : new Set([guid]));
         }
     }
     updateManager() {
         this.manager = {};
-        for (const guid in this.hash) {
-            if (this.hash.hasOwnProperty(guid)) {
-                const entity = this.hash[guid];
-                // add entity to manager
-                for (let component in entity) {
-                    if (entity.hasOwnProperty(component)) {
-                        // for each component in the object
-                        if (this.manager[component] === undefined) {
-                            // add set if undefined
-                            this.manager[component] = new Set([guid]);
-                        } else {
-                            // add to set if existing component type
-                            this.manager[component].add(guid);
-                        }
-                    }
-                }
+        for (let guid of props(this.hash)) {
+            const entity = this.hash[guid];
+            // for each component in the object, add to manager
+            for (let component of props(entity)) {
+                this.addToManager(component, guid);
             }
         }
     }
-    filter(...components) {
+    filterGuids(...components) {
         let { manager } = this;
-        let set = manager[components[0]] === undefined ? new Set() : manager[components[0]];
-        for (let component of components) {
-            if (manager[component] !== undefined) {
+        if (!has(manager, components[0])) return new Set();
+        let set = manager[components[0]];
+        for (let component of components.slice(1)) {
+            if (has(manager, component)) {
                 set = setOps.intersection(set, manager[component]);
+            } else {
+                return new Set();
             }
         }
         return set;
-        // return setOps.intersection(...components.map(comp => this.manager[comp]));
+    }
+    filterEntities(...components) {
+        return Array.from(this.filterGuids(...components)).map(guid => this.hash[guid]);
     }
     names(set) {
         let arr = [];
         for (let id of set) {
-            arr.push(this.hash[id] && this.hash[id].name);
+            ensure(has(this.hash, id), `ECS.names(set): Guid ${id} not in hash.`);
+            arr.push(this.hash[id].name);
         }
         return arr;
     }
@@ -156,17 +171,21 @@ if (true) {
         sprite: './fire.png',
     }
     ecs.addEntity(player);
-    console.log(ecs.names(ecs.filter('position', 'velocity')));
     ecs.addEntity(enemy);
-    console.log(ecs.names(ecs.filter('position', 'velocity')));
     ecs.addEntity(flame);
-    console.log(ecs.names(ecs.filter('position', 'velocity')));
     // ecs.removeEntity(flame);
     // delete flame.position;
+    console.log(ecs.names(ecs.filterGuids('position')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
+
     flame.position = undefined;
+    flame.heat = 5;
+    // ecs.updateEntity(flame);
     ecs.updateGuid(flame.guid);
-    console.log(ecs.names(ecs.filter('position', 'velocity')));
     // ecs.updateManager();
+    console.log(ecs.names(ecs.filterGuids('position')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
+    console.log(ecs.names(ecs.filterGuids('heat')));
 }
 
 module.exports = { ECS };
