@@ -83,7 +83,8 @@ class ECS {
     }
     updateEntity(entity) {
         ensure(typeof entity === 'object', `ECS.updateEntity(entity): Entity ${entity} is not an object`);
-        ensure(entity.guid != undefined, `ECS.updateEntity(entity): Entity ${entity} has no guid!`);
+        ensure(entity.guid != undefined, `ECS.updateEntity(entity): Entity ${entity} has no guid`);
+        ensure(this.hash[entity.guid] != undefined, `ECS.updateEntity(entity): Entity ${entity} not registered with ECS`);
         // components in manager but no longer in entity
         for (let component of props(this.manager)) {
             if (!has(entity, component)) {

@@ -20,8 +20,8 @@ function union(setA, ...sets) {
 function intersection(setA, ...sets) {
     let _intersection = new Set(setA);
     for (let setB of sets) {
-        for (let elem of setB) {
-            if (!_intersection.has(elem)) {
+        for (let elem of _intersection) {
+            if (!setB.has(elem)) {
                 _intersection.delete(elem);
             }
         }
